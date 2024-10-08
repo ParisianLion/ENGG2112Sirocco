@@ -49,6 +49,34 @@ def rgb_to_vector_array(rgb_image):
 
     return np.array(vector_array)
 
+def geo_to_cartesian(latitude, longitude, altitude):
+    # Convert degrees to radians
+    lat_rad = math.radians(latitude)
+    lon_rad = math.radians(longitude)
+    
+    # Average radius of the Earth in kilometers
+    R = 6371.0  # km
+    # Adjusted radius
+    R_prime = R + (altitude / 1000.0)  # convert altitude to km
+    
+    # Calculate Cartesian coordinates
+    x = R_prime * math.cos(lat_rad) * math.cos(lon_rad)
+    y = R_prime * math.cos(lat_rad) * math.sin(lon_rad)
+    z = R_prime * math.sin(lat_rad)
+    
+    return (float(x), float(y), float(z))
+
+# Example usage
+latitude = 34.0522  # Latitude of Los Angeles
+longitude = -118.2437  # Longitude of Los Angeles
+altitude = 100  # Altitude in meters
+
+coordinates = geo_to_cartesian(latitude, longitude, altitude)
+print(coordinates)
+
+
+
+
 # Create the heatmap
 rgb_image = create_heatmap()
 
