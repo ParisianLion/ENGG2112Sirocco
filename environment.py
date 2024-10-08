@@ -36,12 +36,15 @@ def rgb_to_vector_array(rgb_image):
             b_value = rgb_image[y, x, 2]  # Blue channel value in [0, 1]
 
             # Calculate zvel based on the average of the blue and red channels
-            # Scale zvel to be in the range [0, 255]
             zvel = ((b_value * 255 + r_value * 255) / 2) - (b_value * 255)
             zvel = max(0, zvel)  # Ensure zvel is not negative
+            
+            # Randomly initialize xvel and yvel in the range [0, 2]
+            xvel = np.random.uniform(0, 2)
+            yvel = np.random.uniform(0, 2)
 
             # Create the vector [x, y, xvel, yvel, zvel]
-            vector = [x, y, 0, 0, zvel]
+            vector = [x, y, xvel, yvel, zvel]
             vector_array.append(vector)
 
     return np.array(vector_array)
