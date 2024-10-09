@@ -1,92 +1,124 @@
-import tensorflow as tf
-from tensorflow.keras import layers, models
+import numpy as np
+import random
+import gym
+from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
 
-
-
-def create_dqn_model(state_space, action_space):
-    model = models.Sequential()
-    model.add(layers.Input(shape=(state_space,)))
-    model.add(layers.Dense(24, activation='relu'))
-    model.add(layers.Dense(24, activation='relu'))
-    model.add(layers.Dense(action_space, activation='linear'))  # Output Q-values for each action
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    return model
-
-action_mapping = {
-    0: "Increase_Altitude",
-    1: "Decrease_Altitude",
-    2: "Turn_Left",
-    3: "Turn_Right",
-    4: "Throttle_Up",
-    5: "Throttle_Down",
-    6: "Land",
-    7: "Take_Off"
-}
+# Define constants
+STATE_SIZE = 9  # position_x, position_y, velocity, angle
+ACTION_SIZE = 22  # move left, move right, go forward, go backward
+EPISODES = 1000
+REPLAY_MEMORY_SIZE = 2000
+BATCH_SIZE = 32
+GAMMA = 0.95  # Discount factor
 
 class DQNAgent:
-    def __init__(self, state_space, action_space):
-        self.model = create_dqn_model(state_space, action_space)
-        self.memory = []
-        self.gamma = 0.99  # Discount rate
+    def __init__(self):
+        self.memory = deque(maxlen=REPLAY_MEMORY_SIZE)
+        self.model = self._build_model()
         self.epsilon = 1.0  # Exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.batch_size = 32
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(Dense(24, input_dim=STATE_SIZE, activation='relu'))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(ACTION_SIZE, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=0.001))
+        return model
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
         if np.random.rand() <= self.epsilon:
-            return np.random.randint(action_space)  # Explore
+            return random.randrange(ACTION_SIZE)  # Explore
         q_values = self.model.predict(state)
         return np.argmax(q_values[0])  # Exploit
 
     def replay(self):
-        if len(self.memory) < self.batch_size:
+        if len(self.memory) < BATCH_SIZE:
             return
-
-        batch = np.random.choice(len(self.memory), self.batch_size)
-        for i in batch:
-            state, action, reward, next_state, done = self.memory[i]
+        minibatch = random.sample(self.memory, BATCH_SIZE)
+        for state, action, reward, next_state, done in minibatch:
             target = reward
             if not done:
-                target += self.gamma * np.amax(self.model.predict(next_state)[0])
+                target += GAMMA * np.amax(self.model.predict(next_state)[0])
             target_f = self.model.predict(state)
             target_f[0][action] = target
             self.model.fit(state, target_f, epochs=1, verbose=0)
-
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+def get_current_state():
+    # Retrieve relevant state variables from the simulator
+    position_x = aircraft.get_position_x()
+    position_y = aircraft.get_position_y()
+    position_z = aircraft.get_position_z()
+    velocity = aircraft.get_velocity()
+    pitch = aircraft.get_pitch()
+    roll = aircraft.get_roll()
+    yaw = aircraft.get_yaw()
+    altitude = aircraft.get_altitude()
+    heading = aircraft.get_heading()
+
+    return np.array([position_x, position_y, position_z, velocity, pitch, roll, yaw, altitude, heading])
+
+def send_action(action_id):
+    # Define your actions here based on the action_id
+    if action_id == 0:  # Example: Move Left
+        aircraft.set_control('AILERON_TRIM_LEFT', 1)
+    elif action_id == 1:  # Move Right
+        aircraft.set_control('AILERON_TRIM_RIGHT', 1)
+    elif action_id == 2:  # Go Forward
+        aircraft.set_control('THROTTLE', 1)  # Full throttle
+    elif action_id == 3:  # Go Backward
+        aircraft.set_control('THROTTLE', -1)  # Reverse throttle
+    # Add more actions based on the action ID
+    # ...
+
+def simulate_environment(action_id):
+    # Send action to MSFS
+    send_action(action_id)
+
+    # Wait briefly to allow the command to take effect
+    time.sleep(0.1)
+
+    # Get the new state from the simulator
+    current_state = get_current_state()
+
+    # Define a reward structure (this will need to be more complex based on your application)
+    reward = 0  # Compute your reward based on the new state or goals
+    done = False  # Define your termination condition based on the state
+
+    return current_state, reward, done
+
 def main():
-    simconnect = SimConnect()
-    env = FlightSimEnv(simconnect)
-    agent = DQNAgent(state_space=NUM_STATES, action_space=NUM_ACTIONS)
-
-    episodes = 1000
-    for episode in range(episodes):
-        state = env.reset()
-        state = np.reshape(state, [1, NUM_STATES])  # Reshape for the model input
-        total_reward = 0
-        done = False
-
-        for step in range(MAX_STEPS):
-            action = agent.act(state)
-            next_state, reward = env.step(action)
-            next_state = np.reshape(next_state, [1, NUM_STATES])  # Reshape for the model input
+    agent = DQNAgent()
+    for episode in range(EPISODES):
+        state = get_current_state()  # Initial state
+        state = np.reshape(state, [1, STATE_SIZE])
+        
+        for time_step in range(200):  # Max time steps per episode
+            action_id = agent.act(state)
+            next_state, reward, done = simulate_environment(action_id)
+            next_state = np.reshape(next_state, [1, STATE_SIZE])
             
-            # Store the experience in memory
-            agent.remember(state, action, reward, next_state, done)
-
+            # Store experience in memory
+            agent.remember(state, action_id, reward, next_state, done)
+            
+            # Update the current state
             state = next_state
-            total_reward += reward
+            
+            # Replay and learn from past experiences
+            agent.replay()
             
             if done:
+                print(f"Episode: {episode}/{EPISODES}, score: {time_step}, e: {agent.epsilon:.2}")
                 break
-        
-        agent.replay()  # Learn from the experiences
-        print(f"Episode {episode}, Total Reward: {total_reward}, Epsilon: {agent.epsilon:.2f}")
 
 if __name__ == "__main__":
     main()
