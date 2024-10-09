@@ -5,6 +5,9 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
+from SimConnect import *
+import time
+
 
 # Define constants
 STATE_SIZE = 9  # position_x, position_y, velocity, angle
@@ -53,7 +56,75 @@ class DQNAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+# Create a connection to the simulator
+simconnect = SimConnect()
+
+# Define the aircraft variables
+class Aircraft:
+    def __init__(self, simconnect):
+        self.simconnect = simconnect
+        self.data = AircraftData()
+    
+    def get_position_x(self):
+        return self.data.Position.X
+    
+    def get_position_y(self):
+        return self.data.Position.Y
+    
+    def get_position_z(self):
+        return self.data.Position.Z
+    
+    def get_velocity(self):
+        return self.data.Velocity.X, self.data.Velocity.Y, self.data.Velocity.Z
+    
+    def get_pitch(self):
+        return self.data.Pitch
+    
+    def get_roll(self):
+        return self.data.Roll
+    
+    def get_yaw(self):
+        return self.data.Yaw
+    
+    def get_altitude(self):
+        return self.data.Altitude
+    
+    def get_heading(self):
+        return self.data.Heading
+    
+    def update(self):
+        self.simconnect.call(REQUESTS.AIRCRAFT_DATA, self.data)
+
+class AircraftData:
+    # Define the structure for the aircraft data
+    def __init__(self):
+        self.Position = PositionData()
+        self.Velocity = VelocityData()
+        self.Pitch = 0.0
+        self.Roll = 0.0
+        self.Yaw = 0.0
+        self.Altitude = 0.0
+        self.Heading = 0.0
+
+class PositionData:
+    def __init__(self):
+        self.X = 0.0
+        self.Y = 0.0
+        self.Z = 0.0
+
+class VelocityData:
+    def __init__(self):
+        self.X = 0.0
+        self.Y = 0.0
+        self.Z = 0.0
+
+# Initialize the aircraft object
+aircraft = Aircraft(simconnect)
+
 def get_current_state():
+    # Update the aircraft data from the simulator
+    aircraft.update()
+    
     # Retrieve relevant state variables from the simulator
     position_x = aircraft.get_position_x()
     position_y = aircraft.get_position_y()
@@ -64,8 +135,6 @@ def get_current_state():
     yaw = aircraft.get_yaw()
     altitude = aircraft.get_altitude()
     heading = aircraft.get_heading()
-
-    return np.array([position_x, position_y, position_z, velocity, pitch, roll, yaw, altitude, heading])
 
 def send_action(action_id):
     # Define your actions here based on the action_id
@@ -80,7 +149,17 @@ def send_action(action_id):
     # Add more actions based on the action ID
     # ...
 
-def simulate_environment(action_id):
+def send_velocities(xvel, yvel, zvel):
+    # Implement the function to send the velocities to MSFS
+    pass
+
+def simulate_environment(action_id, velocity_index):
+    # Get the velocities from the pre-made matrix
+    xvel, yvel, zvel = velocity_matrix[velocity_index]
+
+    # Send velocities to MSFS
+    send_velocities(xvel, yvel, zvel)
+
     # Send action to MSFS
     send_action(action_id)
 
@@ -89,6 +168,8 @@ def simulate_environment(action_id):
 
     # Get the new state from the simulator
     current_state = get_current_state()
+
+    #get new xvel, yvel, zvel
 
     # Define a reward structure (this will need to be more complex based on your application)
     reward = 0  # Compute your reward based on the new state or goals
